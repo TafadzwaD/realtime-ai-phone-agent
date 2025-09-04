@@ -1,8 +1,10 @@
 import {
+  BadRequestException,
   Controller,
   Get,
   HttpCode,
   Post,
+  RawBodyRequest,
   Req,
   Res,
   UnauthorizedException,
@@ -29,27 +31,24 @@ export class AppController {
 
   @Post('webhook')
   @HttpCode(200)
-  async webhook(@Req() req: Request, @Res() res: Response) {
+  async webhook(@Req() req: RawBodyRequest<Request>) {
     try {
       const event = await this.client.webhooks.unwrap(
-        req.body,
+        req.rawBody!.toString(),
         req.headers,
-        this.webhookSecret,
+        this.webhookSecret!,
       );
 
-      const body: RealtimeCallIncomingWebhookEvent = req.body;
-
-      if (body.type === 'realtime.call.incoming') {
-        await this.phoneService.handleIncomingCall();
+      if (event.type === 'realtime.call.incoming') {
+        return this.phoneService.handleIncomingCall();
       }
-      console.log(event);
+
       return 'pong';
     } catch (e) {
       if (e instanceof OpenAI.InvalidWebhookSignatureError) {
-        console.error('Invalid signature', e);
         throw new UnauthorizedException('Invalid signature');
       } else {
-        throw e;
+        throw new BadRequestException(e.message);
       }
     }
   }
