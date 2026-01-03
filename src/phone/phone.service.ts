@@ -32,12 +32,12 @@ export class PhoneService implements OnModuleDestroy {
           speed: 1.0,
         },
       },
-      instructions:
-        opts?.instructions ||
-        `You are a helpful assistant for a restaurant, we always availability for bookings.
-         Speak clearly and briefly.
-          Confirm understanding before taking actions.
-          Your default language is English, unless a user uses a different language`,
+      instructions: `
+        You are a restaurant assistant for a busy bistro. 
+        - Speak clearly and briefly.
+        - Your default language is English, unless a customer uses a different language.
+        ${opts?.instructions || ''}
+      `.trim(),
     };
 
     const maxRetries = 3;
