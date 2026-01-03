@@ -40,14 +40,27 @@ export class PhoneService implements OnModuleDestroy {
           Your default language is English, unless a user uses a different language`,
     };
 
-    try {
-      await axios.post(
-        `https://api.openai.com/v1/realtime/calls/${callId}/accept`,
-        body,
-        { headers: { ...this.authHeader, 'Content-Type': 'application/json' } },
-      );
-    } catch (e) {
-      console.log('Error yacho', e.message);
+    const maxRetries = 3;
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        return await axios.post(
+          `https://api.openai.com/v1/realtime/calls/${callId}/accept`,
+          body,
+          {
+            headers: { ...this.authHeader, 'Content-Type': 'application/json' },
+            timeout: 5000, // 5-second timeout per attempt
+          },
+        );
+      } catch (e: any) {
+        const isRetryable =
+          e.response?.status === 504 || e.response?.status === 404;
+        if (!isRetryable || i === maxRetries - 1) throw e;
+
+        this.logger.warn(
+          `Accept attempt ${i + 1} failed (${e.response?.status}). Retrying...`,
+        );
+        await new Promise((res) => setTimeout(res, 1000)); // Wait 1s before retry
+      }
     }
   }
 
@@ -61,18 +74,17 @@ export class PhoneService implements OnModuleDestroy {
     this.sockets.set(callId, ws);
 
     ws.on('open', () => {
-      this.logger.log(`WS open for call ${callId}`);
-
-      const responseCreate = {
-        type: 'response.create',
-        response: {
-          instructions: `Greet the user and ask them what they need assistance with.
-             Use English as a default language.
-             For booking cancellation, ask for booking reference and name only.
-             If a user is silent for more than 3 seconds, ask if they are still there or if they need help with anything`,
-        },
-      };
-      ws.send(JSON.stringify(responseCreate));
+      this.logger.log(`WS connection opened for call ${callId}`);
+      // Start the conversation
+      ws.send(
+        JSON.stringify({
+          type: 'response.create',
+          response: {
+            instructions:
+              'Greet the caller and ask for their name and how you can help.',
+          },
+        }),
+      );
     });
 
     ws.on('message', (data) => {
@@ -133,7 +145,7 @@ export class PhoneService implements OnModuleDestroy {
 
   close(callId: string) {
     const sock = this.sockets.get(callId);
-    if (sock && sock.readyState === WebSocket.OPEN) sock.close(1000, 'done');
+    if (sock) sock.close(1000);
     this.sockets.delete(callId);
   }
 
